@@ -1,0 +1,61 @@
+# Default policy for data diagnosis toolkit
+# Adheres strictly to DISEASES.md and AGENT PROMPT specifications
+
+borderline_band: 0.02
+
+markup_languages:
+  - html
+  - xml
+  - jsx
+  - tsx
+  - vue
+  - svelte
+  - markdown
+
+phone_regions:
+  - IN
+  - GB
+  - US
+
+thresholds:
+  a4_fffd_drop_threshold: 3
+  b3_drop_char_ratio: 0.01
+  c2_repeat_line_count: 3
+  c2_repeat_line_ratio: 0.30
+  c3_min_last_line_len: 40
+  d1_window_size: 300
+  d1_confidence_threshold: 0.80
+  d2_latin_letter_ratio: 0.60
+  d3_latin_token_low: 0.05
+  d3_latin_token_high: 0.95
+  e1_max_line_len: 1000
+  e1_mean_line_len: 100
+  e1_alphanumeric_ratio: 0.25
+  e2_min_blob_len: 200
+  e3_min_val_len: 8
+  e3_min_entropy: 3.5
+  f1_drop_threshold: 3
+  h2_jaccard_threshold: 0.80
+  h3_cosine_threshold: 0.85
+  harm_test_max_fail_pct: 1.0
+
+verdict_precedence:
+  - step: 1
+    condition: "any_F3_or_F2"
+    verdict: "drop"
+  - step: 2
+    condition: "E3_present"
+    verdict: "drop"
+  - step: 3
+    condition: "F1_confirmed"
+    verdict_gte_3: "drop"
+    verdict_lt_3: "fix"
+  - step: 4
+    condition: "irreparable_or_severe"
+    verdict: "drop"
+  - step: 5
+    condition: "any_other_confirmed"
+    verdict: "fix"
+  - step: 6
+    condition: "clean_and_full_read"
+    verdict: "clean"

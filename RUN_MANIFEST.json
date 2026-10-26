@@ -1,0 +1,21 @@
+{
+  "pack_id": "ind-mr-fw2",
+  "python_version": "3.12.14",
+  "platform": "linux-aarch64",
+  "dependencies": {
+    "pyarrow": "21.0.0",
+    "regex": "2024.11.6",
+    "ftfy": "6.3.1",
+    "phonenumbers": "8.13.55",
+    "pyyaml": "6.0.2",
+    "rich": "13.9.4",
+    "torch": "2.6.0"
+  },
+  "determinism": {
+    "PYTHONHASHSEED": 0,
+    "seed": 1729,
+    "borderline_band": 0.02
+  },
+  "policy": "src/datadx/policy.default.yaml",
+  "created_at": "2026-10-25T13:42:52Z"
+}

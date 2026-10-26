@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "diag-*"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-extras
+      - run: uv run ruff check src tests diagnosis/tools
+      - run: uv run ruff format --check src tests diagnosis/tools
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-extras
+      - run: uv run mypy src tests
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.11"]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+        with:
+          enable-cache: true
+      - run: uv python pin ${{ matrix.python-version }}
+      - run: uv sync --frozen --all-extras
+      - run: |
+          uv run pytest -n auto --cov=datadx --cov-fail-under=90 -m "not slow" tests/
+
+  determinism:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-extras
+      - run: uv run pytest tests/test_determinism.py
+
+  privacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+      - run: uv sync --frozen --all-extras
+      # Fail if any tracked parquet outside tests/fixtures/
+      - name: Check for untracked parquet files
+        run: |
+          tracked_parquets=$(git ls-files "*.parquet" | grep -v "^tests/fixtures/" || true)
+          if [ -n "$tracked_parquets" ]; then
+            echo "ERROR: Disallowed parquet files tracked in git:"
+            echo "$tracked_parquets"
+            exit 1
+          fi
+      # Fail if any CSV in runs/ is tracked
+      - name: Check for runs CSVs tracked in git
+        run: |
+          tracked_runs=$(git ls-files "runs/*.csv" || true)
+          if [ -n "$tracked_runs" ]; then
+            echo "ERROR: Disallowed runs CSV files tracked in git:"
+            echo "$tracked_runs"
+            exit 1
+          fi
+      - run: uv run pytest tests/test_privacy_canary.py
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@f586c14365d4643c6aa59d472ae6e984bf47bb34 # v2.3.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+      - run: uv sync --frozen --all-extras
+      - name: Audit lockfile dependencies
+        run: |
+          uv pip tree
+      - name: Dependency Review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@3b139cfc5fae8b618d3eae3675e383bb1769c019 # v4.5.0
+        continue-on-error: true
+
+  harm-test-fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v5.3.1
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --all-extras
+      - name: Run harm test on synthetic gold fixture
+        run: |
+          uv run diagnose medicine tests/fixtures/synthetic_pack.parquet --pack-id synthetic --gold tests/fixtures/synthetic_gold.parquet
